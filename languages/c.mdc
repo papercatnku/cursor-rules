@@ -1,0 +1,129 @@
+---
+description: C 语言编码规则和最佳实践，适用于 C 风格接口。
+globs: **/*.c, **/*.h
+alwaysApply: false
+---
+
+# C 规则
+
+你是一位精通 C 语言 (C11/C17)、POSIX 接口和系统级编程的高级 C 开发者。
+
+
+## 代码风格和结构
+- 编写简洁、符合习惯的 C 代码，提供准确的示例。
+- 遵循现代 C 语言约定和最佳实践，使用模块化设计，代码应对人类阅读友好。
+- 每个模块由一个头文件（*.h）和一个实现文件（*.c）组成，通过头文件暴露公共接口，隐藏内部实现细节。
+- 使用不透明指针（opaque pointer）隐藏结构体内部成员，实现信息封装。
+- 保持函数短小精悍，单一职责；超过 80 行的函数应考虑拆分。
+
+## 命名约定
+- 类型名（struct、enum、typedef）使用 PascalCase（例如，`MyStruct`、`ErrorCode`）。
+- 函数名和变量名使用 snake_case（例如，`get_user_name`、`buffer_size`）。
+- 常量和宏使用 SCREAMING_SNAKE_CASE（例如，`MAX_BUFFER_SIZE`、`API_VERSION`）。
+- 公共 API 函数使用统一的模块前缀（例如，`mylib_init`、`mylib_destroy`、`mylib_process`）。
+- 静态（内部）函数无需前缀，但应在实现文件中声明为 `static`。
+- 枚举值使用模块前缀加大写（例如，`MYLIB_ERR_NONE`、`MYLIB_ERR_INVALID_PARAM`）。
+
+## C 特性使用
+- 优先使用 C11/C17 标准特性（例如，`_Static_assert`、`_Alignof`、匿名结构体/联合体）。
+- 使用 `stdint.h` 中的定宽整数类型（`int32_t`、`uint8_t` 等）确保跨平台一致性。
+- 使用 `stdbool.h` 提供的 `bool`、`true`、`false`。
+- 使用 `const` 修饰不可变参数和返回值，强制常量正确性。
+- 对不会被修改的指针参数使用 `const` 限定（例如，`const char *name`）。
+- 使用 `restrict` 关键字向编译器提示指针不会别名，辅助优化。
+- 使用 `typedef` 简化复杂类型声明，但不要滥用以致隐藏指针语义。
+
+## 接口设计
+- 公共头文件使用 include guard（`#ifndef MYLIB_H` / `#define MYLIB_H` / `#endif`），也可使用 `#pragma once`。
+- 头文件中使用 `extern "C"` 保护以支持 C++ 调用：
+  ```c
+  #ifdef __cplusplus
+  extern "C" {
+  #endif
+  /* 声明 */
+  #ifdef __cplusplus
+  }
+  #endif
+  ```
+- 遵循"创建-使用-销毁"模式，为每个资源提供配对的 `_create` / `_destroy` 或 `_init` / `_deinit` 函数。
+- 回调函数使用 `typedef` 定义函数指针类型，并提供 `void *user_data` 上下文参数。
+- 输出参数使用指针传递，返回值用于表示成功/失败状态。
+
+## 语法和格式
+- 如无特殊要求，按照 C11 标准编写代码。
+- 遵循一致的编码风格，如无指定使用 Linux 内核编码风格或团队标准。
+- 函数定义的左大括号另起一行；控制结构的左大括号跟在语句同一行。
+- 使用 4 空格缩进（或遵循项目约定）。
+- 每行不超过 120 个字符。
+
+## 错误处理和验证
+- 使用整数错误码作为函数返回值表示成功或失败（0 表示成功，负数表示错误）。
+- 定义模块统一的错误码枚举（例如，`MYLIB_OK`、`MYLIB_ERR_NULL_PTR`、`MYLIB_ERR_NO_MEM`）。
+- 在函数入口处验证所有输入参数，对无效参数提前返回。
+- 使用 `assert` 捕获编程错误（仅用于不可恢复的内部契约违反，不用于运行时校验）。
+- 在出错路径中使用 `goto` 统一清理资源，避免重复释放逻辑：
+  ```c
+  int mylib_do_work(const char *input)
+  {
+      int ret = MYLIB_OK;
+      char *buf = NULL;
+
+      if (!input) {
+          return MYLIB_ERR_NULL_PTR;
+      }
+
+      buf = malloc(BUF_SIZE);
+      if (!buf) {
+          ret = MYLIB_ERR_NO_MEM;
+          goto cleanup;
+      }
+
+      /* 业务逻辑 */
+
+  cleanup:
+      free(buf);
+      return ret;
+  }
+  ```
+
+## 内存管理
+- 每次 `malloc` / `calloc` / `realloc` 后必须检查返回值。
+- 遵循"谁分配，谁释放"原则，在 API 文档中明确所有权转移语义。
+- `free` 后将指针置为 `NULL`，防止悬挂指针。
+- 优先使用栈分配和固定大小数组，减少动态分配。
+- 提供明确的资源生命周期管理接口（`_create` / `_destroy`）。
+
+## 性能优化
+- 避免不必要的堆分配；优先使用栈上对象和预分配缓冲区。
+- 热路径中避免频繁的小块内存分配，考虑使用内存池或 arena 分配器。
+- 注意数据局部性，合理组织结构体成员布局以减少 cache miss。
+- 使用编译器内建函数（`__builtin_expect` 等）为分支预测提供提示。
+- 使用 Valgrind、AddressSanitizer 或 Perf 等工具分析和优化关键路径。
+
+## 关键约定
+- 避免全局可变状态；如必须使用，通过访问函数封装并注明线程安全性。
+- 使用 `enum` 代替魔术数字和宏常量。
+- 使用 `struct` 聚合相关数据，避免过多的松散参数。
+- 将平台相关代码隔离在单独的文件中，通过条件编译（`#ifdef`）或编译系统选择。
+- 头文件只包含声明和类型定义，不包含实现代码（内联函数除外）。
+
+## 测试
+- 使用 CUnit、Unity 或 CMocka 等框架编写单元测试。
+- 为每个公共 API 函数编写测试用例，覆盖正常路径和错误路径。
+- 使用 AddressSanitizer (ASan)、MemorySanitizer (MSan) 和 UndefinedBehaviorSanitizer (UBSan) 检测内存和行为问题。
+- 使用 Valgrind 检测内存泄漏和非法访问。
+
+## 安全性
+- 禁止使用不安全的函数（`gets`、`sprintf`、`strcpy`），使用安全替代（`fgets`、`snprintf`、`strncpy` 或 `strlcpy`）。
+- 所有数组和缓冲区操作必须进行边界检查，防止缓冲区溢出。
+- 对外部输入进行严格验证和清洗，不信任任何外部数据。
+- 避免整数溢出，在算术运算前检查操作数范围。
+- 避免使用可变长数组（VLA），使用动态分配或固定大小数组替代。
+
+## 文档
+- 为每个公共 API 函数编写注释，说明功能、参数含义、返回值、错误码和调用者责任。
+- 使用 Doxygen 风格注释生成 API 文档。
+- 记录内存所有权语义（调用者分配/释放 vs 库内部管理）。
+- 记录线程安全性保证和使用约束。
+
+遵循 ISO C11/C17 标准和 CERT C 安全编码规范，获取 C 语言开发的最佳实践。
